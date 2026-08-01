@@ -55,12 +55,13 @@
   /** @type {Map<string, Command>} */
   // prettier-ignore
   const COMMANDS = new Map([
-    ['a', { name: 'AI', suggestions: ['a/chatgpt', 'a/gemini'], url: 'https://claude.ai/new' }],
+    ['a', { name: 'AI', suggestions: ['a/chatgpt'], url: 'https://claude.ai/new' }],
     ['a/chatgpt', { url: 'https://chatgpt.com' }],
-    ['a/gemini', { url: 'https://gemini.google.com' }],
     ['c', { name: 'ChatGPT', url: 'https://chatgpt.com' }],
     ['d', { name: 'Discord', url: 'https://discord.com/channels/@me' }],
-    ['g', { name: 'GitHub', searchTemplate: '/search?q={}', suggestions: ['g/copilot', 'g/trending'], url: 'https://github.com' }],
+    ['g', { name: 'GitHub', searchTemplate: '/search?q={}', suggestions: ['g/justin', 'g/linsoc'], url: 'https://github.com' }],
+    ['g/justin', { url: 'https://github.com/justin-chiam' }],
+    ['g/linsoc', { url: 'https://github.com/linuxunsw' }],
     ['i', { name: 'Instagram', url: 'https://www.instagram.com' }],
     ['l', { name: 'LinkedIn', url: 'https://www.linkedin.com/'}],
     ['m', { name: 'Moodle', url: 'https://moodle.telt.unsw.edu.au/'}],
