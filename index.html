@@ -27,6 +27,9 @@
     --color-text-subtle: #888;
     --color-text: #eee;
     --font-family: SpaceGrotesk, -apple-system, Helvetica, sans-serif;
+    /* momentum's stack, for the clock/greeting only */
+    --font-family-momentum: -apple-system, BlinkMacSystemFont, Pretendard,
+      'Helvetica Neue', Helvetica, Arial, sans-serif;
     --font-size: clamp(16px, 1.5vw, 18px);
     --color-accent: #e34;
     --transition-speed: 200ms;
@@ -374,18 +377,24 @@
     #startClock() {
       if (this.#clockInterval !== null) return;
 
-      const hour = this.shadowRoot.querySelector('.hand--hour');
-      const minute = this.shadowRoot.querySelector('.hand--minute');
-      const second = this.shadowRoot.querySelector('.hand--second');
+      const hours = this.shadowRoot.querySelector('.hours');
+      const minutes = this.shadowRoot.querySelector('.minutes');
+      const message = this.shadowRoot.querySelector('.greeting .message');
 
       const tick = () => {
         const now = new Date();
-        const hours = now.getHours() % 12;
-        const minutes = now.getMinutes();
-        const seconds = now.getSeconds();
-        second.style.transform = `rotate(${seconds * 6}deg)`;
-        minute.style.transform = `rotate(${(minutes + seconds / 60) * 6}deg)`;
-        hour.style.transform = `rotate(${(hours + minutes / 60) * 30}deg)`;
+        const hours24 = now.getHours();
+        hours.textContent = String(hours24 % 12 || 12);
+        minutes.textContent = String(now.getMinutes()).padStart(2, '0');
+
+        // morning: 4:00-11:59, afternoon: 12:00-16:59, evening: 17:00-3:59
+        const period =
+          hours24 >= 4 && hours24 < 12
+            ? 'morning'
+            : hours24 >= 12 && hours24 < 17
+              ? 'afternoon'
+              : 'evening';
+        message.textContent = `Good ${period}, `;
       };
 
       tick();
@@ -669,7 +678,7 @@
 <template id="commands-template">
   <style>
     nav {
-      --dial-size: min(55vh, 55vw);
+      --dial-size: min(68vh, 68vw);
       align-items: center;
       box-sizing: border-box;
       display: flex;
@@ -743,62 +752,55 @@
       transform: translateY(0);
     }
 
-    .clock {
-      aspect-ratio: 1;
-      height: calc(var(--dial-size) * 0.85);
+    /*
+     * capped at momentum's own sizes (--font-clock 9.5rem, --font-size-greeting
+     * 3.375rem, against its 16px root), then held inside the ring's clear zone,
+     * which is 0.76 * --dial-size. the longest greeting runs 10.4em and the
+     * clock 2.5em, so those factors are the widest that clear the items.
+     */
+    .clock-greeting {
+      --clock-size: min(152px, calc(var(--dial-size) * 0.27));
+      --greeting-size: min(54px, calc(var(--dial-size) * 0.0675));
+      align-items: center;
+      display: flex;
+      flex-direction: column;
+      font-family: var(--font-family-momentum);
       left: 50%;
       pointer-events: none;
       position: absolute;
+      text-align: center;
       top: 50%;
       transform: translate(-50%, -50%);
+      white-space: nowrap;
     }
 
-    .hand {
-      background: var(--color-text);
-      border-radius: 2px;
-      bottom: 50%;
-      left: 50%;
-      position: absolute;
-      transform-origin: bottom center;
+    /* momentum: 500 weight, tracked -0.25rem at 9.5rem, line-height 1.15 */
+    .time {
+      font-size: var(--clock-size);
+      font-weight: 500;
+      letter-spacing: -0.0263em;
+      line-height: 1.15;
     }
 
-    .hand--hour {
-      height: 30%;
-      width: 3px;
-      margin-left: -1.5px;
+    .colon {
+      position: relative;
+      top: -0.095em;
     }
 
-    .hand--minute {
-      height: 40%;
-      width: 2px;
-      margin-left: -1px;
-    }
-
-    .hand--second {
-      background: var(--color-accent);
-      height: 45%;
-      width: 1px;
-      margin-left: -0.5px;
-    }
-
-    .dot {
-      background: var(--color-text);
-      border-radius: 50%;
-      height: 6px;
-      left: 50%;
-      position: absolute;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: 6px;
+    .greeting {
+      font-size: var(--greeting-size);
+      font-weight: 400;
+      line-height: 1.2;
+      padding-top: 4px;
     }
   </style>
   <nav>
     <menu class="commands"></menu>
-    <div class="clock">
-      <div class="hand hand--hour"></div>
-      <div class="hand hand--minute"></div>
-      <div class="hand hand--second"></div>
-      <div class="dot"></div>
+    <div class="clock-greeting">
+      <div class="time">
+        <span class="hours"></span><span class="colon">:</span><span class="minutes"></span>
+      </div>
+      <div class="greeting"><span class="message"></span><span class="who">Justin.</span></div>
     </div>
   </nav>
 </template>
