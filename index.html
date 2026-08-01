@@ -208,11 +208,21 @@
     }
 
     splitBy = config.commandPathDelimiter;
-    const [pathKey, path] = splitOnce(query, splitBy);
+    const segments = query.split(splitBy);
 
-    if (commands.has(pathKey)) {
+    for (let depth = segments.length - 1; depth > 0; depth--) {
+      const pathKey = segments.slice(0, depth).join(splitBy);
+
+      if (!commands.has(pathKey)) continue;
+
       const command = commands.get(pathKey);
-      const url = `${new URL(command.url).origin}/${path}`;
+      const path = segments.slice(depth).join(splitBy);
+      const base = new URL(command.url);
+      const url =
+        depth === 1
+          ? `${base.origin}/${path}`
+          : `${base.href.replace(/\/+$/, '')}/${path}`;
+
       return { key: pathKey, path, query, splitBy, url };
     }
 
