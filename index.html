@@ -58,7 +58,8 @@
   /** @type {Map<string, Command>} */
   // prettier-ignore
   const COMMANDS = new Map([
-    ['a', { name: 'AI', suggestions: ['a/chatgpt'], url: 'https://claude.ai/new' }],
+    ['a', { name: 'AI', suggestions: ['a/claude', 'a/chatgpt'], url: 'https://claude.ai/new' }],
+    ['a/claude', { url: 'https://claude.ai' }],
     ['a/chatgpt', { url: 'https://chatgpt.com' }],
     ['c', { name: 'CSE', searchTemplate: '/{}', url: 'https://cgi.cse.unsw.edu.au/comp1521' }],
     ['d', { name: 'Discord', url: 'https://discord.com/channels/@me' }],
