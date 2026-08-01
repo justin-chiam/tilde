@@ -57,7 +57,7 @@
   const COMMANDS = new Map([
     ['a', { name: 'AI', suggestions: ['a/chatgpt'], url: 'https://claude.ai/new' }],
     ['a/chatgpt', { url: 'https://chatgpt.com' }],
-    ['c', { name: 'ChatGPT', url: 'https://chatgpt.com' }],
+    ['c', { name: 'CSE', searchTemplate: '/{}', url: 'https://cgi.cse.unsw.edu.au/comp1521' }],
     ['d', { name: 'Discord', url: 'https://discord.com/channels/@me' }],
     ['g', { name: 'GitHub', searchTemplate: '/search?q={}', suggestions: ['g/justin', 'g/linsoc'], url: 'https://github.com' }],
     ['g/justin', { url: 'https://github.com/justin-chiam' }],
@@ -69,6 +69,7 @@
     ['o/office', { url: 'https://outlook.cloud.microsoft/mail/' }],
     ['p', { name: 'Proton', url: 'https://mail.proton.me/u/0/inbox' }],
     ['t', { name: 'Twitch', url: 'https://www.twitch.tv/' }],
+    ['w', { name: 'WebCMS', url: 'https://webcms3.cse.unsw.edu.au/' }],
     ['y', { name: 'YouTube', searchTemplate: '/results?search_query={}', url: 'https://www.youtube.com/feed/subscriptions' }],
     ['0', { name: 'localhost', url: 'http://localhost:3000' }],
   ]);
