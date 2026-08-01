@@ -230,6 +230,7 @@
     const parentKey = parsedQuery.query.split(config.commandPathDelimiter)[0];
     const exactMatch = commands.has(parsedQuery.query);
     let suggestions = [
+      ...(exactMatch ? [parsedQuery.query] : []),
       ...(commands.get(parsedQuery.query)?.suggestions ??
         commands.get(parentKey)?.suggestions ??
         []),
@@ -641,23 +642,21 @@
         const button = suggestionFragment.querySelector('.suggestion');
         button.dataset.index = index;
         button.dataset.suggestion = suggestion;
-        const matched = suggestion.match(pattern);
+        const label = COMMANDS.get(suggestion)?.name ?? suggestion;
+        const matched = label.match(pattern);
 
         if (matched) {
           const matchFragment = TEMPLATES.match.content.cloneNode(true);
           const match = matchFragment.querySelector('.match');
-          const beforeMatch = suggestion.slice(0, matched.index);
-
-          const afterMatch = suggestion.slice(
-            matched.index + matched[0].length
-          );
+          const beforeMatch = label.slice(0, matched.index);
+          const afterMatch = label.slice(matched.index + matched[0].length);
 
           match.textContent = matched[0];
           match.insertAdjacentText('beforebegin', beforeMatch);
           match.insertAdjacentText('afterend', afterMatch);
           button.append(matchFragment);
         } else {
-          button.textContent = suggestion;
+          button.textContent = label;
         }
 
         this.#suggestions.append(suggestionFragment);
