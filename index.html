@@ -52,6 +52,11 @@
     defaultSearchTemplate: 'https://google.com/search?q={}',
     openLinksInNewTab: false,
     suggestionLimit: 4,
+    // unauthenticated github allows 60 core + 10 search requests per hour and
+    // minute respectively, per ip. repos are only fetched while typing a
+    // github path, so one request per owner per ttl is the worst case.
+    githubRepoCacheTtl: 10 * 60 * 1000,
+    githubSearchDebounce: 300,
   };
 
   // named entries appear on the dial, in insertion order. suggestions are curated.
@@ -86,6 +91,8 @@
    * @property {string} defaultSearchTemplate
    * @property {boolean} openLinksInNewTab
    * @property {number} suggestionLimit
+   * @property {number} githubRepoCacheTtl
+   * @property {number} githubSearchDebounce
    */
 
   /**
@@ -303,6 +310,184 @@
         resolve([]);
       };
     });
+  }
+
+  /**
+   * @param {number} ms
+   * @returns {Promise<void>}
+   */
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  const GITHUB_HOST = 'github.com';
+  const GITHUB_API = 'https://api.github.com';
+  const GITHUB_CACHE_PREFIX = 'tilde:repos:';
+
+  /** @type {Map<string, Promise<string[]>>} */
+  const pendingRepoRequests = new Map();
+
+  let githubBlockedUntil = 0;
+
+  /**
+   * @param {string=} key
+   * @param {Map<string, Command>} commands
+   * @returns {string?}
+   */
+  function getGitHubOwner(key, commands) {
+    const command = key ? commands.get(key) : undefined;
+
+    if (!command) return null;
+
+    const { hostname, pathname } = new URL(command.url);
+
+    if (hostname !== GITHUB_HOST && hostname !== `www.${GITHUB_HOST}`) {
+      return null;
+    }
+
+    const segments = pathname.split('/').filter(Boolean);
+    return segments.length === 1 ? segments[0] : null;
+  }
+
+  /**
+   * @param {string=} key
+   * @param {Map<string, Command>} commands
+   * @returns {boolean}
+   */
+  function isGitHubCommand(key, commands) {
+    const command = key ? commands.get(key) : undefined;
+    if (!command) return false;
+    return new URL(command.url).hostname.endsWith(GITHUB_HOST);
+  }
+
+  /**
+   * @param {number} status
+   * @param {Headers} headers
+   */
+  function blockGitHubUntilReset(status, headers) {
+    if (status !== 403 && status !== 429) return;
+
+    const reset = Number(headers.get('x-ratelimit-reset')) * 1000;
+    githubBlockedUntil = reset > Date.now() ? reset : Date.now() + 60_000;
+  }
+
+  /**
+   * @param {string} owner
+   * @returns {{fetchedAt: number, repos: string[]}?}
+   */
+  function readRepoCache(owner) {
+    try {
+      const cached = JSON.parse(
+        localStorage.getItem(`${GITHUB_CACHE_PREFIX}${owner}`)
+      );
+
+      return Array.isArray(cached?.repos) ? cached : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * @param {string} owner
+   * @returns {string[]}
+   */
+  function readOwnerRepos(owner) {
+    return readRepoCache(owner)?.repos ?? [];
+  }
+
+  /**
+   * @param {string} owner
+   * @param {AppConfig} config
+   * @returns {Promise<string[]>}
+   */
+  function refreshOwnerRepos(owner, config) {
+    const cached = readRepoCache(owner);
+
+    if (cached && Date.now() - cached.fetchedAt < config.githubRepoCacheTtl) {
+      return Promise.resolve(cached.repos);
+    }
+
+    if (Date.now() < githubBlockedUntil) {
+      return Promise.resolve(cached?.repos ?? []);
+    }
+
+    const pending = pendingRepoRequests.get(owner);
+    if (pending) return pending;
+
+    const request = (async () => {
+      try {
+        const response = await fetch(
+          `${GITHUB_API}/users/${encodeURIComponent(owner)}/repos?per_page=100&sort=updated`,
+          { headers: { Accept: 'application/vnd.github+json' } }
+        );
+
+        if (!response.ok) {
+          blockGitHubUntilReset(response.status, response.headers);
+          return cached?.repos ?? [];
+        }
+
+        const repos = (await response.json()).map(({ name }) => name);
+
+        localStorage.setItem(
+          `${GITHUB_CACHE_PREFIX}${owner}`,
+          JSON.stringify({ fetchedAt: Date.now(), repos })
+        );
+
+        return repos;
+      } catch {
+        return cached?.repos ?? [];
+      } finally {
+        pendingRepoRequests.delete(owner);
+      }
+    })();
+
+    pendingRepoRequests.set(owner, request);
+    return request;
+  }
+
+  /**
+   * @param {string} search
+   * @param {AppConfig} config
+   * @returns {Promise<string[]>}
+   */
+  async function fetchGitHubRepoSearch(search, config) {
+    if (Date.now() < githubBlockedUntil) return [];
+
+    try {
+      const response = await fetch(
+        `${GITHUB_API}/search/repositories?per_page=${config.suggestionLimit}&q=${encodeURIComponent(search)}`,
+        { headers: { Accept: 'application/vnd.github+json' } }
+      );
+
+      if (!response.ok) {
+        blockGitHubUntilReset(response.status, response.headers);
+        return [];
+      }
+
+      const { items = [] } = await response.json();
+      return items.map(({ full_name }) => `${GITHUB_HOST}/${full_name}`);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * @param {ParsedQuery} parsedQuery
+   * @param {string[]} repos
+   * @param {AppConfig} config
+   * @returns {string[]}
+   */
+  function toRepoSuggestions(parsedQuery, repos, config) {
+    const term = (parsedQuery.path ?? parsedQuery.search ?? '').toLowerCase();
+
+    if (term.includes(config.commandPathDelimiter)) return [];
+
+    return repos
+      .filter((repo) => repo.toLowerCase().includes(term))
+      .sort(
+        (a, b) => a.toLowerCase().indexOf(term) - b.toLowerCase().indexOf(term)
+      )
+      .map((repo) => `${parsedQuery.key}${config.commandPathDelimiter}${repo}`);
   }
 
   class CommandRing extends HTMLElement {
@@ -523,6 +708,21 @@
       else this.#input.focus();
     }
 
+    #isStaleQuery(parsedQuery) {
+      const currentQuery = parseQuery(this.#input.value, COMMANDS, CONFIG);
+      return currentQuery.query !== parsedQuery.query;
+    }
+
+    #render(suggestions, query) {
+      const unique = [...new Set(suggestions)].slice(0, CONFIG.suggestionLimit);
+
+      if (unique.length) {
+        this.#renderSuggestions(unique, query);
+      } else {
+        this.#suggestions.innerHTML = '';
+      }
+    }
+
     #onInput = async () => {
       const parsedQuery = parseQuery(this.#input.value, COMMANDS, CONFIG);
 
@@ -531,45 +731,77 @@
         return;
       }
 
-      let suggestions = collectLocalSuggestions(parsedQuery, COMMANDS, CONFIG);
+      const browsedOwner = getGitHubOwner(parsedQuery.key, COMMANDS);
+
+      const localSuggestions = collectLocalSuggestions(
+        parsedQuery,
+        COMMANDS,
+        CONFIG
+      );
+
+      const suggestions = [
+        ...localSuggestions,
+        ...(browsedOwner
+          ? toRepoSuggestions(parsedQuery, readOwnerRepos(browsedOwner), CONFIG)
+          : []),
+      ];
+
+      const remotePending = browsedOwner || parsedQuery.search?.length > 1;
 
       const suggestionsWithStale = [
         ...suggestions,
         ...this.#lastSuggestions.filter((suggestion) =>
           suggestion.includes(parsedQuery.query)
         ),
-      ].slice(0, CONFIG.suggestionLimit);
+      ];
 
       if (suggestionsWithStale.length) {
-        this.#renderSuggestions(suggestionsWithStale, parsedQuery.query);
-      } else if (!(parsedQuery.search?.length > 1)) {
+        this.#render(suggestionsWithStale, parsedQuery.query);
+      } else if (!remotePending) {
         this.#suggestions.innerHTML = '';
       }
 
-      if (parsedQuery.search?.length > 1) {
-        const results = await fetchDuckDuckGoSuggestions(parsedQuery.search);
-        const currentQuery = parseQuery(this.#input.value, COMMANDS, CONFIG);
-        if (currentQuery.query !== parsedQuery.query) return;
+      if (browsedOwner) {
+        const repos = await refreshOwnerRepos(browsedOwner, CONFIG);
+        if (this.#isStaleQuery(parsedQuery)) return;
 
-        const duckDuckGoSuggestions = parsedQuery.splitBy
+        this.#render(
+          [
+            ...localSuggestions,
+            ...toRepoSuggestions(parsedQuery, repos, CONFIG),
+          ],
+          parsedQuery.query
+        );
+
+        return;
+      }
+
+      if (!(parsedQuery.search?.length > 1)) return;
+
+      let remoteSuggestions;
+
+      if (isGitHubCommand(parsedQuery.key, COMMANDS)) {
+        await sleep(CONFIG.githubSearchDebounce);
+        if (this.#isStaleQuery(parsedQuery)) return;
+
+        remoteSuggestions = await fetchGitHubRepoSearch(
+          parsedQuery.search,
+          CONFIG
+        );
+      } else {
+        const results = await fetchDuckDuckGoSuggestions(parsedQuery.search);
+
+        remoteSuggestions = parsedQuery.splitBy
           ? results.map(
               (search) => `${parsedQuery.key}${parsedQuery.splitBy}${search}`
             )
           : results;
-
-        this.#lastSuggestions = duckDuckGoSuggestions;
-
-        suggestions = [...suggestions, ...duckDuckGoSuggestions].slice(
-          0,
-          CONFIG.suggestionLimit
-        );
-
-        if (suggestions.length) {
-          this.#renderSuggestions(suggestions, parsedQuery.query);
-        } else {
-          this.#suggestions.innerHTML = '';
-        }
       }
+
+      if (this.#isStaleQuery(parsedQuery)) return;
+
+      this.#lastSuggestions = remoteSuggestions;
+      this.#render([...suggestions, ...remoteSuggestions], parsedQuery.query);
     };
 
     #onPaste = (event) => {
