@@ -57,6 +57,7 @@
     // github path, so one request per owner per ttl is the worst case.
     githubRepoCacheTtl: 10 * 60 * 1000,
     githubSearchDebounce: 300,
+    currentTerm: '26T2',
   };
 
   // named entries appear on the dial, in insertion order. suggestions are curated.
@@ -81,7 +82,7 @@
     ['p', { name: 'Proton', url: 'https://mail.proton.me/u/0/inbox' }],
     ['s', { name: 'MyTuition', url: 'https://secure.mytuition.au/' }],
     ['t', { name: 'Twitch', url: 'https://www.twitch.tv/' }],
-    ['w', { name: 'WebCMS', url: 'https://webcms3.cse.unsw.edu.au/' }],
+    ['w', { name: 'WebCMS', searchTemplate: `/COMP{}/${CONFIG.currentTerm}`, url: 'https://webcms3.cse.unsw.edu.au' }],
     ['y', { name: 'YouTube', searchTemplate: '/results?search_query={}', url: 'https://www.youtube.com/' }],
     ['0', { name: 'localhost', url: 'http://localhost:3000' }],
   ]);
@@ -95,6 +96,7 @@
    * @property {number} suggestionLimit
    * @property {number} githubRepoCacheTtl
    * @property {number} githubSearchDebounce
+   * @property {string} currentTerm
    */
 
   /**
